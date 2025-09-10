@@ -88,5 +88,4 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run API tests
-        run: |
-          go test ./test/apitests -v
+        run: go test ./test/apitests -v
