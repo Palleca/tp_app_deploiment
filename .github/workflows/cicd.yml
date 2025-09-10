@@ -46,9 +46,11 @@ jobs:
           go test -coverprofile=coverage.out $(go list ./... | grep -v '/test/apitests')
           go tool cover -func=coverage.out || true
 
-      - name: Upload coverage artifact (HTML)
+      - name: Generate coverage HTML
         run: go tool cover -html=coverage.out -o coverage.html || true
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-html
