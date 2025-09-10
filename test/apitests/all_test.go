@@ -38,12 +38,12 @@ func TestGetCats(t *testing.T) {
 		t.Error("We should get code 200, got", code)
 	}
 
-	if len(result) != 2 {
+	if len(result) != 1 {
 		t.Error("We should get one item, got", len(result))
 		return
 	}
 
-	if result[1] != initCatId {
+	if result[0] != initCatId {
 		t.Error("Listing the IDs, got", result[0])
 	}
 }

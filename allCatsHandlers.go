@@ -56,3 +56,21 @@ func createCat(req *http.Request) (int, any) {
 	Logger.Infof("Cat '%s' saved into the DB", newCatID)
 	return http.StatusCreated, newCatID
 }
+
+func deleteCat(req *http.Request) (int, any) {
+	// Récupérer l'ID depuis la route {catId}
+	id := req.PathValue("catId")
+	if id == "" {
+		return http.StatusBadRequest, "Missing id parameter"
+	}
+
+	// Vérifier si le chat existe
+	if _, exists := catsDatabase[id]; !exists {
+		return http.StatusNotFound, "Cat not found"
+	}
+
+	// Supprimer le chat
+	delete(catsDatabase, id)
+	Logger.Infof("Cat '%s' deleted from the DB", id)
+	return http.StatusNoContent, nil
+}
