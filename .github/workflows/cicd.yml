@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Compute versions
+      - name: Compute versions (lowercase image for GHCR)
         id: versioning
         shell: bash
         run: |
@@ -29,33 +29,28 @@ jobs:
           echo "## 🔖 New version '$version'" >> $GITHUB_STEP_SUMMARY
           echo "## 📦 Image '$imageName'" >> $GITHUB_STEP_SUMMARY
 
-  # --- Job 2 : unit tests ---
+  # --- Job 2 : unit tests (sans API tests) ---
   unit-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
-      - name: Run unit tests (exclude API tests) + coverage (best-effort)
+      - name: Run unit tests + coverage (best-effort)
         shell: bash
         run: |
           PKGS=$(go list ./... | grep -v '/test/apitests' || true)
           if [ -z "$PKGS" ]; then
             echo "No unit-test packages found"; exit 0
           fi
-          # Tests unitaires bloquants
           go test -v $PKGS
-          # Couverture non bloquante (évite erreurs 'covdata')
           go test -coverprofile=coverage.out $PKGS || echo "::warning :: coverage collection failed, continuing"
           if [ -f coverage.out ]; then
             go tool cover -func=coverage.out || true
             go tool cover -html=coverage.out -o coverage.html || true
           fi
-
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -75,11 +70,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Debug repo tree (helpful if build fails)
+        run: |
+          echo "== pwd ==" && pwd
+          echo "== tree (maxdepth 3) ==" && find . -maxdepth 3 -type f -printf "%p\n" | sort
+
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Locate Dockerfile & context
+        id: locate
+        shell: bash
+        run: |
+          set -e
+          DF=$(git ls-files | grep -E '(^|/)[Dd]ockerfile$' | head -n1 || true)
+          if [ -z "$DF" ]; then
+            echo "No Dockerfile found in repo"; exit 1
+          fi
+          CONTEXT=$(dirname "$DF")
+          echo "dockerfile=$DF"   >> $GITHUB_OUTPUT
+          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+          echo "Using Dockerfile: $DF"
+          echo "Using context   : $CONTEXT"
+
       - name: Build Docker image
-        run: docker build -t ${{ needs.versioning.outputs.imageName }} ./tp_app_deploiment
+        run: docker build -t ${{ needs.versioning.outputs.imageName }} -f ${{ steps.locate.outputs.dockerfile }} ${{ steps.locate.outputs.context }}
 
       - name: Push Docker image
         run: docker push ${{ needs.versioning.outputs.imageName }}
@@ -102,12 +117,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
       - name: Wait for backend to be ready
         run: |
           for i in {1..30}; do
@@ -119,10 +132,8 @@ jobs:
           done
           echo "Backend did not become ready in time ❌"
           exit 1
-
       - name: Run API tests
         run: go test ./test/apitests -v
-
       - name: Dump backend logs on failure
         if: failure()
         run: |
